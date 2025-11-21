@@ -26,8 +26,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/oklog/ulid/v2"
 )
 
 // todo: remove these and the things depending on them
@@ -2493,8 +2491,8 @@ func cacheContentionTest(b *testing.B, numMatchers, numAdders, numRemovers int) 
 			// We will miss on purpose to blow the cache.
 			n := b.N / numMatchers
 			for i := 0; i < n; i++ {
-				// We use ulid rather than nuid here as in the original test
-				subj := "foo.bar.baz." + ulid.Make().String()
+				// We use a random number here rather than nuid as in the original test
+				subj := "foo.bar.baz." + fmt.Sprintf("%d", rand.Int63())
 				s.Match(subj)
 			}
 			mwg.Done()
