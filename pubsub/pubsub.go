@@ -39,7 +39,7 @@ func sub(ps *PubSub, subj string, handler any, options ...SubOption) context.Can
 		opt(&opts)
 	}
 
-	// Create the underlyng Subscription object, giving it a unique ID within this sublist
+	// Create the underlying Subscription object, giving it a unique ID within this sublist
 	id := strconv.Itoa(ps.nextID)
 	ps.nextID++
 	sub := sublist.Subscription{Subject: []byte(subj), Value: handler, ID: id, Queue: opts.Queue, Debug: opts.Debug}
