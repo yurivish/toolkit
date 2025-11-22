@@ -1,4 +1,4 @@
-package toolkit
+package must
 
 func Do(err error) {
 	Be(err == nil, err)
