@@ -129,7 +129,7 @@ func Pub[M any](ps *PubSub, subj string, message M) {
 	// > (https://www.eecs.harvard.edu/~michaelm/postscripts/handbook2001.pdf)
 	// > has a great explanation. The mathematical intuition is that if we (randomly) throw n balls into n bins,
 	// > the maximum number of balls in any bin is O(log n / log log n) with high probability, which is pretty much
-	// >  just O(log n). But if (instead of choosing randomly) we choose the least loaded of k random bins, the maximum
+	// > just O(log n). But if (instead of choosing randomly) we choose the least loaded of k random bins, the maximum
 	// > is O(log log n / log k) with high probability, i.e., even with two random choices, it's basically O(log log n)
 	// > and each additional choice only reduces the load by a constant factor.
 	for _, subs := range matches.Qsubs {
