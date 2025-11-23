@@ -18,7 +18,7 @@ type Subscription struct {
 	Line     int
 	FuncName string
 
-	// So we can optionally identify individual subscriptions
+	// Optional identifier so we can identify individual subscriptions
 	ID string
 
 	// So we can tell if this is a "Debug" subscription (created with DebugSub)
