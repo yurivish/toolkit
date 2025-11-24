@@ -16,6 +16,7 @@ package sublist
 import (
 	"bytes"
 	"errors"
+	"iter"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,21 +26,6 @@ import (
 )
 
 const _EMPTY_ = ""
-
-// Subject mapping and transform setups.
-// var (
-// 	commaSeparatorRegEx                = regexp.MustCompile(`,\s*`)
-// 	partitionMappingFunctionRegEx      = regexp.MustCompile(`{{\s*[pP]artition\s*\((.*)\)\s*}}`)
-// 	wildcardMappingFunctionRegEx       = regexp.MustCompile(`{{\s*[wW]ildcard\s*\((.*)\)\s*}}`)
-// 	splitFromLeftMappingFunctionRegEx  = regexp.MustCompile(`{{\s*[sS]plit[fF]rom[lL]eft\s*\((.*)\)\s*}}`)
-// 	splitFromRightMappingFunctionRegEx = regexp.MustCompile(`{{\s*[sS]plit[fF]rom[rR]ight\s*\((.*)\)\s*}}`)
-// 	sliceFromLeftMappingFunctionRegEx  = regexp.MustCompile(`{{\s*[sS]lice[fF]rom[lL]eft\s*\((.*)\)\s*}}`)
-// 	sliceFromRightMappingFunctionRegEx = regexp.MustCompile(`{{\s*[sS]lice[fF]rom[rR]ight\s*\((.*)\)\s*}}`)
-// 	splitMappingFunctionRegEx          = regexp.MustCompile(`{{\s*[sS]plit\s*\((.*)\)\s*}}`)
-// 	leftMappingFunctionRegEx           = regexp.MustCompile(`{{\s*[lL]eft\s*\((.*)\)\s*}}`)
-// 	rightMappingFunctionRegEx          = regexp.MustCompile(`{{\s*[rR]ight\s*\((.*)\)\s*}}`)
-// 	randomMappingFunctionRegEx         = regexp.MustCompile(`{{\s*[rR]andom\s*\((.*)\)\s*}}`)
-// )
 
 // Sublist is a routing mechanism to handle subject distribution and
 // provides a facility to match subjects from published messages to
@@ -374,16 +360,6 @@ func (s *Sublist) chkForRemoveNotification(subject, queue string) {
 func (s *Sublist) Insert(sub *Subscription) error {
 	// copy the subject since we hold this and this might be part of a large byte slice.
 	subject := string(sub.Subject)
-	tsa := [32]string{}
-	tokens := tsa[:0]
-	start := 0
-	for i := 0; i < len(subject); i++ {
-		if subject[i] == btsep {
-			tokens = append(tokens, subject[start:i])
-			start = i + 1
-		}
-	}
-	tokens = append(tokens, subject[start:])
 
 	s.Lock()
 
@@ -391,7 +367,7 @@ func (s *Sublist) Insert(sub *Subscription) error {
 	var n *node
 	l := s.root
 
-	for _, t := range tokens {
+	for t := range strings.SplitSeq(subject, tsep) {
 		lt := len(t)
 		if lt == 0 || sfwc {
 			s.Unlock()
@@ -713,28 +689,6 @@ func (s *Sublist) reduceCacheCount() {
 	s.Unlock()
 }
 
-// We have no remote subs since this implementation is designed to stay in-process
-// func isRemoteQSub(sub *Subscription) bool {
-// 	return false
-// }
-
-// // Helper function for auto-expanding remote qsubs.
-// func isRemoteQSub(sub *Subscription) bool {
-// 	return sub != nil && sub.queue != nil && sub.client != nil && (sub.client.kind == ROUTER || sub.client.kind == LEAF)
-// }
-//
-// // UpdateRemoteQSub should be called when we update the weight of an existing
-// // remote queue sub.
-// func (s *Sublist) UpdateRemoteQSub(sub *Subscription) {
-// 	// We could search to make sure we find it, but probably not worth
-// 	// it unless we are thrashing the cache. Just remove from our L2 and update
-// 	// the genid so L1 will be flushed.
-// 	s.Lock()
-// 	s.removeFromCache(string(sub.subject))
-// 	atomic.AddUint64(&s.genid, 1)
-// 	s.Unlock()
-// }
-
 // This will add in a node's results to the total results.
 func addNodeToResults(n *node, results *SublistResult) {
 	// Normal subscriptions
@@ -758,16 +712,9 @@ func addNodeToResults(n *node, results *SublistResult) {
 			results.Qsubs = append(results.Qsubs, nqsub)
 		}
 		for sub := range qr {
-			// This implementation has no remote qsubs.
-			// if isRemoteQSub(sub) {
-			// 	ns := atomic.LoadInt32(&sub.qw)
-			// 	// Shadow these subscriptions
-			// 	for n := 0; n < int(ns); n++ {
-			// 		results.Qsubs[i] = append(results.Qsubs[i], sub)
-			// 	}
-			// } else {
+			// Y: This implementation has no remote qsubs,
+			// so we omit code for their handling.
 			results.Qsubs[i] = append(results.Qsubs[i], sub)
-			// }
 		}
 	}
 }
@@ -874,16 +821,6 @@ type lnt struct {
 // Raw low level remove, can do batches with lock held outside.
 func (s *Sublist) remove(sub *Subscription, shouldLock bool, doCacheUpdates bool) error {
 	subject := string(sub.Subject)
-	tsa := [32]string{}
-	tokens := tsa[:0]
-	start := 0
-	for i := 0; i < len(subject); i++ {
-		if subject[i] == btsep {
-			tokens = append(tokens, subject[start:i])
-			start = i + 1
-		}
-	}
-	tokens = append(tokens, subject[start:])
 
 	if shouldLock {
 		s.Lock()
@@ -898,7 +835,7 @@ func (s *Sublist) remove(sub *Subscription, shouldLock bool, doCacheUpdates bool
 	var lnts [32]lnt
 	levels := lnts[:0]
 
-	for _, t := range tokens {
+	for t := range strings.SplitSeq(subject, tsep) {
 		lt := len(t)
 		if lt == 0 || sfwc {
 			return ErrInvalidSubject
@@ -1018,6 +955,9 @@ func (n *node) isEmpty() bool {
 
 // Return the number of nodes for the given level.
 func (l *level) numNodes() int {
+	if l == nil {
+		return 0
+	}
 	num := len(l.nodes)
 	if l.pwc != nil {
 		num++
@@ -1250,8 +1190,7 @@ func isValidSubject(subject string, checkRunes bool) bool {
 		}
 	}
 	sfwc := false
-	tokens := strings.Split(subject, tsep)
-	for _, t := range tokens {
+	for t := range strings.SplitSeq(subject, tsep) {
 		length := len(t)
 		if length == 0 || sfwc {
 			return false
@@ -1274,12 +1213,12 @@ func isValidSubject(subject string, checkRunes bool) bool {
 
 // IsValidLiteralSubject returns true if a subject is valid and literal (no wildcards), false otherwise
 func IsValidLiteralSubject(subject string) bool {
-	return isValidLiteralSubject(strings.Split(subject, tsep))
+	return isValidLiteralSubject(strings.SplitSeq(subject, tsep))
 }
 
 // isValidLiteralSubject returns true if the tokens are valid and literal (no wildcards), false otherwise
-func isValidLiteralSubject(tokens []string) bool {
-	for _, t := range tokens {
+func isValidLiteralSubject(tokens iter.Seq[string]) bool {
+	for t := range tokens {
 		if len(t) == 0 {
 			return false
 		}
@@ -1293,47 +1232,6 @@ func isValidLiteralSubject(tokens []string) bool {
 	}
 	return true
 }
-
-// // ValidateMapping returns nil error if the subject is a valid subject mapping destination subject
-// func ValidateMapping(src string, dest string) error {
-// 	if dest == _EMPTY_ {
-// 		return nil
-// 	}
-// 	subjectTokens := strings.Split(dest, tsep)
-// 	sfwc := false
-// 	for _, t := range subjectTokens {
-// 		length := len(t)
-// 		if length == 0 || sfwc {
-// 			return &mappingDestinationErr{t, ErrInvalidMappingDestinationSubject}
-// 		}
-
-// 		// if it looks like it contains a mapping function, it should be a valid mapping function
-// 		if length > 4 && t[0] == '{' && t[1] == '{' && t[length-2] == '}' && t[length-1] == '}' {
-// 			if !partitionMappingFunctionRegEx.MatchString(t) &&
-// 				!wildcardMappingFunctionRegEx.MatchString(t) &&
-// 				!splitFromLeftMappingFunctionRegEx.MatchString(t) &&
-// 				!splitFromRightMappingFunctionRegEx.MatchString(t) &&
-// 				!sliceFromLeftMappingFunctionRegEx.MatchString(t) &&
-// 				!sliceFromRightMappingFunctionRegEx.MatchString(t) &&
-// 				!splitMappingFunctionRegEx.MatchString(t) &&
-// 				!randomMappingFunctionRegEx.MatchString(t) {
-// 				return &mappingDestinationErr{t, ErrUnknownMappingDestinationFunction}
-// 			} else {
-// 				continue
-// 			}
-// 		}
-
-// 		if length == 1 && t[0] == fwc {
-// 			sfwc = true
-// 		} else if strings.ContainsAny(t, "\t\n\f\r ") {
-// 			return ErrInvalidMappingDestinationSubject
-// 		}
-// 	}
-
-// 	// Finally, verify that the transform can actually be created from the source and destination
-// 	_, err := NewSubjectTransform(src, dest)
-// 	return err
-// }
 
 // Will check tokens and report back if the have any partial or full wildcards.
 func analyzeTokens(tokens []string) (hasPWC, hasFWC bool) {
@@ -1590,57 +1488,6 @@ func matchLiteral(literal, subject string) bool {
 	return li >= ll
 }
 
-// func addLocalSub(sub *Subscription, subs *[]*Subscription, includeLeafHubs bool) {
-// 	if sub != nil && sub.client != nil {
-// 		kind := sub.client.kind
-// 		if kind == CLIENT || kind == SYSTEM || kind == JETSTREAM || kind == ACCOUNT ||
-// 			(includeLeafHubs && sub.client.isHubLeafNode() /* implied kind==LEAF */) {
-// 			*subs = append(*subs, sub)
-// 		}
-// 	}
-// }
-
-// func (s *Sublist) addNodeToSubs(n *node, subs *[]*Subscription, includeLeafHubs bool) {
-// 	// Normal subscriptions
-// 	if n.plist != nil {
-// 		for _, sub := range n.plist {
-// 			addLocalSub(sub, subs, includeLeafHubs)
-// 		}
-// 	} else {
-// 		for sub := range n.psubs {
-// 			addLocalSub(sub, subs, includeLeafHubs)
-// 		}
-// 	}
-// 	// Queue subscriptions
-// 	for _, qr := range n.qsubs {
-// 		for sub := range qr {
-// 			addLocalSub(sub, subs, includeLeafHubs)
-// 		}
-// 	}
-// }
-
-// func (s *Sublist) collectLocalSubs(l *level, subs *[]*Subscription, includeLeafHubs bool) {
-// 	for _, n := range l.nodes {
-// 		s.addNodeToSubs(n, subs, includeLeafHubs)
-// 		s.collectLocalSubs(n.next, subs, includeLeafHubs)
-// 	}
-// 	if l.pwc != nil {
-// 		s.addNodeToSubs(l.pwc, subs, includeLeafHubs)
-// 		s.collectLocalSubs(l.pwc.next, subs, includeLeafHubs)
-// 	}
-// 	if l.fwc != nil {
-// 		s.addNodeToSubs(l.fwc, subs, includeLeafHubs)
-// 		s.collectLocalSubs(l.fwc.next, subs, includeLeafHubs)
-// 	}
-// }
-
-// // Return all local client subscriptions. Use the supplied slice.
-// func (s *Sublist) localSubs(subs *[]*Subscription, includeLeafHubs bool) {
-// 	s.RLock()
-// 	s.collectLocalSubs(s.root, subs, includeLeafHubs)
-// 	s.RUnlock()
-// }
-
 // All is used to collect all subscriptions.
 func (s *Sublist) All(subs *[]*Subscription) {
 	s.RLock()
@@ -1767,56 +1614,6 @@ func getAllNodes(l *level, results *SublistResult) {
 		getAllNodes(n.next, results)
 	}
 }
-
-// IntersectStree will match all items in the given subject tree that
-// have interest expressed in the given sublist. The callback will only be called
-// once for each subject, regardless of overlapping subscriptions in the sublist.
-// func IntersectStree[T any](st *stree.SubjectTree[T], sl *Sublist, cb func(subj []byte, entry *T)) {
-// 	var _subj [255]byte
-// 	intersectStree(st, sl.root, _subj[:0], cb)
-// }
-
-// func intersectStree[T any](st *stree.SubjectTree[T], r *level, subj []byte, cb func(subj []byte, entry *T)) {
-// 	nsubj := subj
-// 	if len(nsubj) > 0 {
-// 		nsubj = append(subj, '.')
-// 	}
-// 	switch {
-// 	case r.fwc != nil:
-// 		// We've reached a full wildcard, do a FWC match on the stree at this point
-// 		// and don't keep iterating downward.
-// 		nsubj := append(nsubj, '>')
-// 		st.Match(nsubj, cb)
-// 	case r.pwc != nil:
-// 		// We've found a partial wildcard. We'll keep iterating downwards, but first
-// 		// check whether there's interest at this level (without triggering dupes) and
-// 		// match if so.
-// 		nsubj := append(nsubj, '*')
-// 		if len(r.pwc.psubs)+len(r.pwc.qsubs) > 0 {
-// 			st.Match(nsubj, cb)
-// 		}
-// 		if r.pwc.next != nil && r.pwc.next.numNodes() > 0 {
-// 			intersectStree(st, r.pwc.next, nsubj, cb)
-// 		}
-// 	default:
-// 		// Normal node with subject literals, keep iterating.
-// 		for t, n := range r.nodes {
-// 			nsubj := append(nsubj, t...)
-// 			if len(n.psubs)+len(n.qsubs) > 0 {
-// 				if subjectHasWildcard(bytesToString(nsubj)) {
-// 					st.Match(nsubj, cb)
-// 				} else {
-// 					if e, ok := st.Find(nsubj); ok {
-// 						cb(nsubj, e)
-// 					}
-// 				}
-// 			}
-// 			if n.next != nil && n.next.numNodes() > 0 {
-// 				intersectStree(st, n.next, nsubj, cb)
-// 			}
-// 		}
-// 	}
-// }
 
 // Note this will avoid a copy of the data used for the string, but it will also reference the existing slice's data pointer.
 // So this should be used sparingly when we know the encompassing byte slice's lifetime is the same.
