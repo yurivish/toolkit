@@ -4,7 +4,6 @@ import (
 	"context"
 	"math/rand/v2"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/yurivish/toolkit/sublist"
@@ -26,6 +25,7 @@ type SubOptions struct {
 	SkipCallers int    // Call stack depth to record caller information from for this subscription
 	Queue       []byte // Queue name for the sublist queue group
 	Debug       bool   // Whether or not this is a debug subscription
+	ID          string // An identifier for this subscription.
 }
 
 // Core subscribe function.
@@ -42,10 +42,8 @@ func sub(ps *PubSub, subj string, handler any, options ...SubOption) context.Can
 		opt(&opts)
 	}
 
-	// Create the underlying Subscription object, giving it a unique ID within this sublist
-	id := strconv.Itoa(ps.nextID)
-	ps.nextID++
-	sub := sublist.Subscription{Subject: []byte(subj), Value: handler, ID: id, Queue: opts.Queue, Debug: opts.Debug}
+	// Create the underlying Subscription object
+	sub := sublist.Subscription{Subject: []byte(subj), Value: handler, ID: opts.ID, Queue: opts.Queue, Debug: opts.Debug}
 
 	// Gather file and line information for subscription and include them
 	// in the Subscription struct for debugging purposes if available
@@ -179,12 +177,23 @@ func WithQueueGroup(name string) SubOption {
 	}
 }
 
-func IsValidSubject(subject string) bool {
+// WithID adds an ID to a subscription
+func WithID(id string) SubOption {
+	return func(s *SubOptions) {
+		s.ID = id
+	}
+}
+
+// IsValidSubject returns whether `subject` is a valid literal NATS subject
+// suitable for publishing to.
+func IsValidPubSubject(subject string) bool {
 	return sublist.IsValidPublishSubject(subject)
 }
 
-func IsValidToken(token string) bool {
-	return IsValidSubject(token) && !strings.ContainsRune(token, '.')
+// IsValidSubject returns whether `token` is a valid literal NATS token, ie.
+// treating non-literal tokens > and * as invalid.
+func IsValidPubToken(token string) bool {
+	return IsValidPubSubject(token) && !strings.ContainsRune(token, '.')
 }
 
 // Ideas:
