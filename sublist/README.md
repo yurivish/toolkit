@@ -1,6 +1,6 @@
 # Subject Matcher Package
 
-A high-performance subject-based routing mechanism with wildcard support, extracted from the [NATS server](https://github.com/nats-io/nats-server) implementation in summer 2025.
+A high-performance subject-based routing mechanism with wildcard support, extracted from the [NATS server](https://github.com/nats-io/nats-server) implementation and last synced with the nats-server main branch in November 2025.
 
 [Sublist docs](https://pkg.go.dev/github.com/nats-io/nats-server/v2@v2.11.6/server#Sublist)
 
