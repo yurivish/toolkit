@@ -2,6 +2,8 @@
 
 A high-performance subject-based routing mechanism with wildcard support, extracted from the [NATS server](https://github.com/nats-io/nats-server) implementation and last synced with the nats-server main branch in November 2025.
 
+Pairs well with the stree package, also ported from the NATS server, whichi allows efficient access to per-subject state using wildcard queries over subjects. In the stree, keys are always literal, but queries can use wildcards. This is the inverse of sublist, where subscriptions can have wildcards but published subjects are literal.
+
 [Sublist docs](https://pkg.go.dev/github.com/nats-io/nats-server/v2@v2.11.6/server#Sublist)
 
 I manually ported the sublist itself abd ported the tests with Claude's assistance, then compared both the sublist and the tests to the implementation in the NATS server repo using [Beyond Compare](https://www.scootersoftware.com/):
@@ -12,8 +14,6 @@ I manually ported the sublist itself abd ported the tests with Claude's assistan
 These original files are stored in the repo as `_nats_sublist.go` and `_nats_sublist_test.go` for reference.
 
 Claude told me that the the `Qsubs` field on the result type is effectively an array of subscriber [queue groups](https://docs.nats.io/nats-concepts/core-nats/queue) that have subscribed particular queues. So if you want to do load balancing between those you can just pick a random subscriber from the group and send your message to it.
-
-This port was done on July 22, 2025.
 
 ## Optimization
 
@@ -81,3 +81,6 @@ func main() {
     //   - all-temps (subject: sensors.temperature.*)
     //   - all-sensors (subject: sensors.>)
 }
+```
+
+This port was done on July 22, 2025 and upadted on November 24, 2025.
