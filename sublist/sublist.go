@@ -1227,7 +1227,7 @@ func IsValidPublishSubject(subject string) bool {
 	return IsValidSubject(subject) && subjectIsLiteral(subject)
 }
 
-// IsValidSubject returns true if a subject is valid, false otherwise
+// IsValidSubject returns true if a subject is vaeclid, false otherwise
 func IsValidSubject(subject string) bool {
 	return isValidSubject(subject, false)
 }

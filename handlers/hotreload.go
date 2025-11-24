@@ -19,6 +19,8 @@ var hotReloadOnlyOnce sync.Once
 // That first successful reconnection will trigger the new server to send the reload script.
 // After that initial reload, this handler will simply send an empty SSE connection thanks to
 // the use of sync.Once.
+//
+// Todo: Make a version that will reconnect *all* clients – maybe by
 func HotReloadHandler(w http.ResponseWriter, r *http.Request) {
 	sse := datastar.NewSSE(w, r)
 	hotReloadOnlyOnce.Do(func() {

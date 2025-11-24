@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/yurivish/toolkit/sublist"
 )
@@ -32,6 +33,8 @@ type SubOptions struct {
 // The handler can be one of two types:
 // - func(subject string, message M) (see [Sub])
 // - func(subject string, message any, *sublist.SublistResult) (see [DebugSub])
+// Messages will be delivered to all regular subscribers, and a random subscriber per queue group.
+// A handler can be part of zero or one queue groups. To register a handler with a queue group, use WithQueue().
 func sub(ps *PubSub, subj string, handler any, options ...SubOption) context.CancelFunc {
 	// Determine the options for this subscription using the "functional options" pattern
 	opts := SubOptions{SkipCallers: 1}
@@ -55,7 +58,7 @@ func sub(ps *PubSub, subj string, handler any, options ...SubOption) context.Can
 	}
 	err := ps.subs.Insert(&sub)
 	if err != nil {
-		panic(err) // only possible error is "invalid subject" which is programmer error.
+		panic(err) // only possible error is "invalid subject", which is programmer error.
 	}
 	return func() {
 		err := ps.subs.Remove(&sub)
@@ -90,7 +93,7 @@ func DebugSub(ps *PubSub, subj string, handler func(string, any, *sublist.Sublis
 	return sub(ps, subj, handler, options...)
 }
 
-// Returns a channel onto which messages are placed.
+// SubChan returns a channel onto which messages are placed.
 // The user is NOT responsible for closing the channel.
 // Both the subscription and channel will be closed once the context completes.
 func SubChan[M any](ps *PubSub, ctx context.Context, subj string, bufSize int, options ...SubOption) <-chan M {
@@ -175,3 +178,14 @@ func WithQueueGroup(name string) SubOption {
 		s.Queue = []byte(name)
 	}
 }
+
+func IsValidSubject(subject string) bool {
+	return sublist.IsValidPublishSubject(subject)
+}
+
+func IsValidToken(token string) bool {
+	return IsValidSubject(token) && !strings.ContainsRune(token, '.')
+}
+
+// Ideas:
+// - Explore the idea of making a "SubSeq" function to treat a subscription as a Seq of messages.
