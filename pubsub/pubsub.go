@@ -12,8 +12,7 @@ import (
 // Simple pub-sub system, optimized for observability and ease of use.
 // Based on the same subject structure as NATS's subject-based messaging system.
 type PubSub struct {
-	subs   *sublist.Sublist
-	nextID int
+	subs *sublist.Sublist
 }
 
 func NewPubSub() *PubSub {
