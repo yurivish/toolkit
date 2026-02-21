@@ -2,6 +2,8 @@
 
 Extracted from the NATS server for use as a standalone data structure. See sublist for more information.
 
+The sublist stores subscriptions, potentially including wildcards. The subject tree stores literal subjects that can be queried using wildcards. 
+
 Opus 4.6 on the difference between the sublist and subject tree:
 
 Your understanding of the sublist is correct. It’s a pattern-matching trie: you insert keys that may contain wildcards, and you query with a literal key to find all matching patterns. The traversal at each level has to fan out to check both the exact token match and any wildcard nodes. This is a well-understood problem — it’s essentially what MQTT brokers and pub/sub systems all need.
