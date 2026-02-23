@@ -1,6 +1,6 @@
 module github.com/yurivish/toolkit
 
-go 1.25.4
+go 1.26
 
 require github.com/starfederation/datastar-go v1.0.3
 
