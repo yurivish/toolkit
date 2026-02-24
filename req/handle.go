@@ -145,7 +145,7 @@ func decodeField(fv reflect.Value, s string) error {
 
 // Validator collects non-field errors and per-field errors into a single place.
 // FieldErrors keys are the external tag values (first matching extractor tag),
-// not Go field names. For example, a field `Name string `query:"name"`` uses
+// not Go field names. For example, a field `Name string `query:"name"“ uses
 // "name" as the key.
 type Validator struct {
 	Errors      []string          // non-field errors ("passwords don't match")
@@ -221,14 +221,14 @@ func (v *Validator) validateStruct(rv reflect.Value) {
 			continue
 		}
 
-	fieldRules:
+	fieldValidators:
 		for rule := range strings.SplitSeq(tag, ",") {
 			name, arg, _ := strings.Cut(rule, "=")
 			for _, vr := range v.validators {
 				if vr.name == name {
 					if msg := vr.validate(fv.Interface(), arg); msg != "" {
 						v.FieldErrors[key] = msg
-						break fieldRules
+						break fieldValidators
 					}
 					break
 				}
