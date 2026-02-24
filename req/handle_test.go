@@ -219,13 +219,13 @@ func TestSignupSuccess(t *testing.T) {
 func Strict[T any](fn func(*Req, T) error) http.HandlerFunc {
 	return Handle(func(req *Req, in T) error {
 		if req.HasErrors() {
-			return HTTPError(400, req.ErrorsMessage())
+			return HTTPError(400, req.Error())
 		}
 		if err := fn(req, in); err != nil {
 			return err
 		}
 		if req.HasErrors() {
-			return HTTPError(400, req.ErrorsMessage())
+			return HTTPError(400, req.Error())
 		}
 		return nil
 	})

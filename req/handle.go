@@ -154,7 +154,7 @@ type Validator struct {
 	validators  []validator
 }
 
-// AddError appends a non-field error.
+// AddError appends a non-field error, and is usually called by [Validator.Check].
 func (v *Validator) AddError(message string) {
 	v.Errors = append(v.Errors, message)
 }
@@ -187,15 +187,15 @@ func (v *Validator) HasErrors() bool {
 	return len(v.Errors) > 0 || len(v.FieldErrors) > 0
 }
 
-// ErrorsMessage formats all errors as a single string.
-func (v *Validator) ErrorsMessage() string {
+// Error formats all errors as a single string.
+func (v *Validator) Error() string {
 	msgs := make([]string, 0, len(v.Errors)+len(v.FieldErrors))
 	msgs = append(msgs, v.Errors...)
 	for field, msg := range v.FieldErrors {
 		msgs = append(msgs, field+": "+msg)
 	}
 	slices.Sort(msgs)
-	return strings.Join(msgs, "; ")
+	return strings.Join(msgs, "\n")
 }
 
 // validateStruct walks struct fields, reads "validate" tags, and writes errors
