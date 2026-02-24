@@ -19,6 +19,8 @@ type Decoder struct {
 }
 
 // DecodeResult holds the outcome of a Decode call.
+// FieldErrors keys are the external tag values (first matching extractor tag),
+// not Go field names.
 type DecodeResult struct {
 	FieldErrors map[string]string // per-field parse failures
 }
@@ -34,6 +36,34 @@ func (d *Decoder) Decode(r *http.Request, dst any) (DecodeResult, error) {
 	}
 	decodeStruct(r, v.Elem(), d.extractors, result.FieldErrors)
 	return result, nil
+}
+
+// externalName returns the first tag value found on a field from the
+// extractor list, falling back to f.Name. This is used as the key in
+// FieldErrors so that error keys match the external names callers use.
+func externalName(f reflect.StructField, extractors []extractor) string {
+	for _, ex := range extractors {
+		if tag, ok := f.Tag.Lookup(ex.tag); ok {
+			return tag
+		}
+	}
+	return f.Name
+}
+
+// requiredMessage builds a descriptive "is required" message listing all
+// sources tried. Single source → `query "name" is required`.
+// Multiple → `query "name" or header "x-name" is required`.
+func requiredMessage(f reflect.StructField, extractors []extractor) string {
+	var parts []string
+	for _, ex := range extractors {
+		if tag, ok := f.Tag.Lookup(ex.tag); ok {
+			parts = append(parts, fmt.Sprintf("%s %q", ex.tag, tag))
+		}
+	}
+	if len(parts) == 0 {
+		return "is required"
+	}
+	return strings.Join(parts, " or ") + " is required"
 }
 
 // decodeStruct tries each extractor in order via f.Tag.Lookup. If no tag
@@ -52,8 +82,9 @@ func decodeStruct(r *http.Request, v reflect.Value, extractors []extractor, errs
 				val, found := ex.extract(r, tag)
 				if found {
 					if err := decodeField(fv, val); err != nil {
-						if _, exists := errs[f.Name]; !exists {
-							errs[f.Name] = fmt.Sprintf("%s %q: %s", ex.tag, tag, err)
+						key := externalName(f, extractors)
+						if _, exists := errs[key]; !exists {
+							errs[key] = fmt.Sprintf("%s %q: %s", ex.tag, tag, err)
 						}
 					}
 					matched = true
@@ -65,7 +96,7 @@ func decodeStruct(r *http.Request, v reflect.Value, extractors []extractor, errs
 		if !matched && fv.Kind() == reflect.Struct {
 			decodeStruct(r, fv, extractors, errs)
 		} else if !matched && fv.Kind() != reflect.Pointer {
-			errs[f.Name] = "is required"
+			errs[externalName(f, extractors)] = requiredMessage(f, extractors)
 		}
 	}
 }
@@ -113,9 +144,13 @@ func decodeField(fv reflect.Value, s string) error {
 // --- Validator ---
 
 // Validator collects non-field errors and per-field errors into a single place.
+// FieldErrors keys are the external tag values (first matching extractor tag),
+// not Go field names. For example, a field `Name string `query:"name"`` uses
+// "name" as the key.
 type Validator struct {
 	Errors      []string          // non-field errors ("passwords don't match")
 	FieldErrors map[string]string // field -> error message; first error per field wins
+	extractors  []extractor
 	validators  []validator
 }
 
@@ -181,7 +216,8 @@ func (v *Validator) validateStruct(rv reflect.Value) {
 		if !ok {
 			continue
 		}
-		if _, exists := v.FieldErrors[f.Name]; exists {
+		key := externalName(f, v.extractors)
+		if _, exists := v.FieldErrors[key]; exists {
 			continue
 		}
 
@@ -191,7 +227,7 @@ func (v *Validator) validateStruct(rv reflect.Value) {
 			for _, vr := range v.validators {
 				if vr.name == name {
 					if msg := vr.validate(fv.Interface(), arg); msg != "" {
-						v.FieldErrors[f.Name] = msg
+						v.FieldErrors[key] = msg
 						break fieldRules
 					}
 					break
@@ -318,7 +354,7 @@ func Handle[T any](fn func(*Req, T) error, opts ...handleOption) http.HandlerFun
 		req := &Req{
 			W:         w,
 			R:         r,
-			Validator: Validator{FieldErrors: result.FieldErrors, validators: validators},
+			Validator: Validator{FieldErrors: result.FieldErrors, extractors: extractors, validators: validators},
 		}
 		req.validateStruct(reflect.ValueOf(&input).Elem())
 		if err := fn(req, input); err != nil {

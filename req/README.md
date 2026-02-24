@@ -23,8 +23,15 @@ func(*Req, T) error
 struct tags — path, query, cookie, or header. When multiple source
 tags are present, extraction priority follows the extractor list order.
 Non-pointer fields are required: if no extractor finds a value, decode
-reports "is required". Pointer fields are optional: missing values stay nil.
-Fields may also carry validate tags for declarative validation
+reports an error like `query "name" is required`.
+
+Pointer fields are optional: missing values stay nil.
+
+Error keys in FieldErrors use external tag values (e.g. `"name"` from `` `query:"name"` ``),
+not Go field names, based on the first extractor tag. A field may have
+multiple extractors; they will be attempted in the order listed.
+
+Fields may also carry `validate` tags for declarative validation
 (notblank, email, min=N, max=N):
 
 ```go
@@ -36,17 +43,22 @@ mux.HandleFunc("GET /add", Handle(func(req *Req, in struct {
 }))
 ```
 
-Boolean helper functions (NotBlank, IsEmail, Between, In, etc.) are
+Boolean helper functions (`NotBlank`, `IsEmail`, `Between`, `In`, etc.) are
 available for composing custom validations with Check and CheckField:
 
 ```go
-req.CheckField(NotBlank(in.Name), "Name", "is required")
-req.CheckField(Between(in.Age, 18, 120), "Age", "must be between 18 and 120")
+req.CheckField(NotBlank(in.Name), "name", "is required")
+req.CheckField(Between(in.Age, 18, 120), "age", "must be between 18 and 120")
 ```
 
 Options can be passed to append additional extractors and validators:
 
 ```go
+	extractSession := func(r *http.Request, name string) (string, bool) {
+		v := r.Header.Get("X-Session-" + name)
+		return v, v != ""
+	}
+
 mux.HandleFunc("GET /dashboard", Handle(handleDashboard,
     WithExtractors(
         NewExtractor("session", extractSession),
@@ -65,7 +77,7 @@ mux.HandleFunc("POST /signup", Handle(func(req *Req, in struct {
     Password string `query:"password"`
     Confirm  string `query:"confirm"`
 }) error {
-    req.CheckField(len(in.Password) >= 8, "Password", "must be at least 8 characters")
+    req.CheckField(len(in.Password) >= 8, "password", "must be at least 8 characters")
     req.Check(in.Password == in.Confirm, "passwords don't match")
     if req.HasErrors() {
         return req.HTML(renderForm(req.Errors, req.FieldErrors))

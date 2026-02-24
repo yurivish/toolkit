@@ -51,8 +51,8 @@ func TestAddMissingParam(t *testing.T) {
 	r := httptest.NewRequest("GET", "/add?a=1", nil)
 	handler.ServeHTTP(w, r)
 
-	if msg, ok := fieldErrors["B"]; !ok || msg != "is required" {
-		t.Fatalf("FieldErrors[B] = %q, want %q", msg, "is required")
+	if msg, ok := fieldErrors["b"]; !ok || msg != `query "b" is required` {
+		t.Fatalf(`FieldErrors["b"] = %q, want %q`, msg, `query "b" is required`)
 	}
 }
 
@@ -62,9 +62,9 @@ func TestCheckFieldNotBlank(t *testing.T) {
 	handler := Handle(func(req *Req, in struct {
 		Name string `query:"name"`
 	}) error {
-		req.CheckField(NotBlank(in.Name), "Name", "is required")
+		req.CheckField(NotBlank(in.Name), "name", "is required")
 		if req.HasErrors() {
-			return req.Text(req.FieldErrors["Name"])
+			return req.Text(req.FieldErrors["name"])
 		}
 		return req.Text("ok")
 	})
@@ -88,9 +88,9 @@ func TestCheckFieldBetween(t *testing.T) {
 	handler := Handle(func(req *Req, in struct {
 		Age int `query:"age"`
 	}) error {
-		req.CheckField(Between(in.Age, 18, 120), "Age", "must be between 18 and 120")
+		req.CheckField(Between(in.Age, 18, 120), "age", "must be between 18 and 120")
 		if req.HasErrors() {
-			return req.Text(req.FieldErrors["Age"])
+			return req.Text(req.FieldErrors["age"])
 		}
 		return req.Text("ok")
 	})
@@ -148,7 +148,7 @@ func signupHandler() http.HandlerFunc {
 		Password string `query:"password"`
 		Confirm  string `query:"confirm"`
 	}) error {
-		req.CheckField(len(in.Password) >= 8, "Password", "must be at least 8 characters")
+		req.CheckField(len(in.Password) >= 8, "password", "must be at least 8 characters")
 		req.Check(in.Password == in.Confirm, "passwords don't match")
 		if req.HasErrors() {
 			// Render errors as HTML (simplified for test).
@@ -174,7 +174,7 @@ func TestSignupInvalidEmail(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "Email: must be a valid email") {
+	if !strings.Contains(body, "email: must be a valid email") {
 		t.Fatalf("body = %q, want email error", body)
 	}
 }
@@ -185,7 +185,7 @@ func TestSignupShortPassword(t *testing.T) {
 	signupHandler().ServeHTTP(w, r)
 
 	body := w.Body.String()
-	if !strings.Contains(body, "Password: must be at least 8 characters") {
+	if !strings.Contains(body, "password: must be at least 8 characters") {
 		t.Fatalf("body = %q, want password error", body)
 	}
 }
