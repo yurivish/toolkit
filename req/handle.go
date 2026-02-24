@@ -18,24 +18,17 @@ type Decoder struct {
 	extractors []extractor
 }
 
-// DecodeResult holds the outcome of a Decode call.
-// FieldErrors keys are the external tag values (first matching extractor tag),
-// not Go field names.
-type DecodeResult struct {
-	FieldErrors map[string]string // per-field parse failures
-}
-
 // Decode populates dst (must be *struct) from the request using struct tags.
-func (d *Decoder) Decode(r *http.Request, dst any) (DecodeResult, error) {
+// It returns per-field parse errors keyed by external tag values (first matching
+// extractor tag), not Go field names.
+func (d *Decoder) Decode(r *http.Request, dst any) (map[string]string, error) {
 	v := reflect.ValueOf(dst)
 	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
-		return DecodeResult{}, fmt.Errorf("decode: dst must be *struct")
+		return nil, fmt.Errorf("decode: dst must be *struct")
 	}
-	result := DecodeResult{
-		FieldErrors: make(map[string]string),
-	}
-	decodeStruct(r, v.Elem(), d.extractors, result.FieldErrors)
-	return result, nil
+	fieldErrors := make(map[string]string)
+	decodeStruct(r, v.Elem(), d.extractors, fieldErrors)
+	return fieldErrors, nil
 }
 
 // externalName returns the first tag value found on a field from the
@@ -346,7 +339,7 @@ func Handle[T any](fn func(*Req, T) error, opts ...handleOption) http.HandlerFun
 	decoder := Decoder{extractors: extractors}
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input T
-		result, err := decoder.Decode(r, &input)
+		fieldErrors, err := decoder.Decode(r, &input)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -354,7 +347,7 @@ func Handle[T any](fn func(*Req, T) error, opts ...handleOption) http.HandlerFun
 		req := &Req{
 			W:         w,
 			R:         r,
-			Validator: Validator{FieldErrors: result.FieldErrors, extractors: extractors, validators: validators},
+			Validator: Validator{FieldErrors: fieldErrors, extractors: extractors, validators: validators},
 		}
 		req.validateStruct(reflect.ValueOf(&input).Elem())
 		if err := fn(req, input); err != nil {
