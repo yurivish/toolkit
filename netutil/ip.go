@@ -2,8 +2,8 @@ package netutil
 
 import "net"
 
-// LocalIP returns the preferred outbound IP address of the machine.
-// It falls back to "0.0.0.0" if the IP cannot be determined.
+// LocalIP returns the preferred outbound IP address of the machine,
+// falling back to "0.0.0.0" if the IP cannot be determined.
 func LocalIP() string {
 	// 8.8.8.8 is Google's public DNS. Any routable public IP would work here;
 	// the OS picks the local interface it would use to reach this destination.
