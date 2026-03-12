@@ -382,21 +382,18 @@ func TestSignalGetQueryParam(t *testing.T) {
 func TestDecodeFieldTypes(t *testing.T) {
 	type mechanism struct {
 		name string
-		tag  string
 		req  func(val string) *http.Request
 	}
 
 	mechanisms := []mechanism{
 		{
 			name: "query",
-			tag:  "query",
 			req: func(val string) *http.Request {
 				return httptest.NewRequest("GET", "/?key="+val, nil)
 			},
 		},
 		{
 			name: "cookie",
-			tag:  "cookie",
 			req: func(val string) *http.Request {
 				r := httptest.NewRequest("GET", "/", nil)
 				r.AddCookie(&http.Cookie{Name: "key", Value: val})
@@ -405,7 +402,6 @@ func TestDecodeFieldTypes(t *testing.T) {
 		},
 		{
 			name: "header",
-			tag:  "header",
 			req: func(val string) *http.Request {
 				r := httptest.NewRequest("GET", "/", nil)
 				r.Header.Set("key", val)
@@ -414,7 +410,6 @@ func TestDecodeFieldTypes(t *testing.T) {
 		},
 		{
 			name: "signal",
-			tag:  "signal",
 			req: func(val string) *http.Request {
 				// val is already the JSON-encoded value (e.g. "42", `"hello"`, "true")
 				body := `{"key":` + val + `}`
@@ -435,7 +430,7 @@ func TestDecodeFieldTypes(t *testing.T) {
 					return req.Text(fmt.Sprint(in.Key))
 				})
 				var val string
-				if m.tag == "signal" {
+				if m.name == "signal" {
 					val = `"hello"`
 				} else {
 					val = "hello"
@@ -533,6 +528,88 @@ func TestDecodeFieldTypes(t *testing.T) {
 					t.Fatalf("got %q, want %q", got, "7")
 				}
 			})
+		}
+	})
+}
+
+// --- Signal array decoding ---
+
+func TestDecodeFieldArray(t *testing.T) {
+	t.Run("matching length", func(t *testing.T) {
+		handler := Handle(func(req *Req, in struct {
+			Point [2]float64 `signal:"point"`
+		}) error {
+			return req.Text(fmt.Sprint(in.Point))
+		})
+		body := `{"point":[1.5,2.5]}`
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if got := w.Body.String(); got != "[1.5 2.5]" {
+			t.Fatalf("got %q, want %q", got, "[1.5 2.5]")
+		}
+	})
+
+	t.Run("wrong length", func(t *testing.T) {
+		var fieldErr string
+		handler := Handle(func(req *Req, in struct {
+			Point [2]float64 `signal:"point"`
+		}) error {
+			fieldErr = req.FieldErrors["point"]
+			return req.NoContent()
+		})
+		body := `{"point":[1.5,2.5,3.5]}`
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(w, r)
+		if fieldErr == "" {
+			t.Fatal("expected field error for wrong array length")
+		}
+		if !strings.Contains(fieldErr, "expected 2 elements, got 3") {
+			t.Fatalf("field error = %q, want message about length mismatch", fieldErr)
+		}
+	})
+
+	t.Run("int array", func(t *testing.T) {
+		handler := Handle(func(req *Req, in struct {
+			Vals [3]int `signal:"vals"`
+		}) error {
+			return req.Text(fmt.Sprint(in.Vals))
+		})
+		body := `{"vals":[10,20,30]}`
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if got := w.Body.String(); got != "[10 20 30]" {
+			t.Fatalf("got %q, want %q", got, "[10 20 30]")
+		}
+	})
+
+	t.Run("string array", func(t *testing.T) {
+		handler := Handle(func(req *Req, in struct {
+			Tags [2]string `signal:"tags"`
+		}) error {
+			return req.Text(fmt.Sprint(in.Tags))
+		})
+		body := `{"tags":["foo","bar"]}`
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if got := w.Body.String(); got != "[foo bar]" {
+			t.Fatalf("got %q, want %q", got, "[foo bar]")
 		}
 	})
 }

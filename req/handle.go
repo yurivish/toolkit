@@ -136,6 +136,24 @@ func decodeField(fv reflect.Value, v any) error {
 	}
 
 	// Non-string values (e.g. JSON-decoded signals): use reflect assignment/conversion.
+
+	// Arrays: decode from []any (JSON arrays) element-by-element.
+	if fv.Kind() == reflect.Array {
+		items, ok := v.([]any)
+		if !ok {
+			return fmt.Errorf("cannot assign %T to %s", v, fv.Type())
+		}
+		if len(items) != fv.Len() {
+			return fmt.Errorf("expected %d elements, got %d", fv.Len(), len(items))
+		}
+		for i := range items {
+			if err := decodeField(fv.Index(i), items[i]); err != nil {
+				return fmt.Errorf("index %d: %w", i, err)
+			}
+		}
+		return nil
+	}
+
 	val := reflect.ValueOf(v)
 	if val.Type().AssignableTo(fv.Type()) {
 		fv.Set(val)
