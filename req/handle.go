@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-
 // --- Decoder ---
 
 // Decoder extracts struct fields from an HTTP request using struct tags.
@@ -60,9 +59,9 @@ func requiredMessage(f reflect.StructField, extractors []extractor) string {
 	return strings.Join(parts, " or ") + " is required"
 }
 
-// decodeStruct tries each extractor in order via f.Tag.Lookup. If no tag
-// produced a value and the field is a struct, it recurses. Non-pointer fields
-// with extraction tags that aren't matched get an "is required" error.
+// decodeStruct tries each extractor in order via f.Tag.Lookup.
+// If no tag produced a value and the field is a struct, it recurses.
+// Non-pointer fields with extraction tags that aren't matched get an "is required" error.
 func decodeStruct(r *http.Request, v reflect.Value, extractors []extractor, errs map[string]string) {
 	t := v.Type()
 	for i := range t.NumField() {
@@ -70,7 +69,6 @@ func decodeStruct(r *http.Request, v reflect.Value, extractors []extractor, errs
 		fv := v.Field(i)
 		matched := false
 
-		// Try each extractor in order.
 		for _, ex := range extractors {
 			if tag, ok := f.Tag.Lookup(ex.tag); ok {
 				val, found := ex.extract(r, tag)
@@ -95,44 +93,59 @@ func decodeStruct(r *http.Request, v reflect.Value, extractors []extractor, errs
 	}
 }
 
-func decodeField(fv reflect.Value, s string) error {
+func decodeField(fv reflect.Value, v any) error {
 	// If a pointer, create a new scalar before decoding into it.
 	if fv.Kind() == reflect.Pointer {
 		fv.Set(reflect.New(fv.Type().Elem()))
 		fv = fv.Elem()
 	}
 
-	switch fv.Kind() {
-	case reflect.String:
-		fv.SetString(s)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return err
+	// String values are parsed into the target type.
+	if s, ok := v.(string); ok {
+		switch fv.Kind() {
+		case reflect.String:
+			fv.SetString(s)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetInt(n)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			n, err := strconv.ParseUint(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetUint(n)
+		case reflect.Float32, reflect.Float64:
+			n, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetFloat(n)
+		case reflect.Bool:
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			fv.SetBool(b)
+		default:
+			return fmt.Errorf("unsupported field type %s", fv.Kind())
 		}
-		fv.SetInt(n)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetUint(n)
-	case reflect.Float32, reflect.Float64:
-		n, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetFloat(n)
-	case reflect.Bool:
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		fv.SetBool(b)
-	default:
-		return fmt.Errorf("unsupported field type %s", fv.Kind())
+		return nil
 	}
-	return nil
+
+	// Non-string values (e.g. JSON-decoded signals): use reflect assignment/conversion.
+	val := reflect.ValueOf(v)
+	if val.Type().AssignableTo(fv.Type()) {
+		fv.Set(val)
+		return nil
+	}
+	if val.Type().ConvertibleTo(fv.Type()) && fv.Kind() != reflect.String {
+		fv.Set(val.Convert(fv.Type()))
+		return nil
+	}
+	return fmt.Errorf("cannot assign %T to %s", v, fv.Type())
 }
 
 // --- Validator ---

@@ -2,20 +2,20 @@ package req
 
 import "net/http"
 
-// extractor extracts a string from a request, returning the string and whether it was found.
+// extractor extracts a value from a request, returning the value and whether it was found.
 type extractor struct {
 	tag     string
-	extract func(*http.Request, string) (string, bool)
+	extract func(*http.Request, string) (any, bool)
 }
 
-func extractPath(r *http.Request, name string) (string, bool) {
+func extractPath(r *http.Request, name string) (any, bool) {
 	v := r.PathValue(name)
 	// note: there is no mechanism to tell whether a path value was absent versus empty,
 	// so we treat empty as missing.
 	return v, v != ""
 }
 
-func extractQuery(r *http.Request, name string) (string, bool) {
+func extractQuery(r *http.Request, name string) (any, bool) {
 	q := r.URL.Query()
 	if !q.Has(name) {
 		return "", false
@@ -23,7 +23,7 @@ func extractQuery(r *http.Request, name string) (string, bool) {
 	return q.Get(name), true
 }
 
-func extractCookie(r *http.Request, name string) (string, bool) {
+func extractCookie(r *http.Request, name string) (any, bool) {
 	c, err := r.Cookie(name)
 	if err != nil {
 		return "", false
@@ -31,7 +31,7 @@ func extractCookie(r *http.Request, name string) (string, bool) {
 	return c.Value, true
 }
 
-func extractHeader(r *http.Request, name string) (string, bool) {
+func extractHeader(r *http.Request, name string) (any, bool) {
 	vals := r.Header.Values(name)
 	if len(vals) == 0 {
 		return "", false
@@ -42,7 +42,9 @@ func extractHeader(r *http.Request, name string) (string, bool) {
 // NewExtractor creates an extractor that reads the given struct tag
 // and calls fn to extract a value from the request.
 func NewExtractor(tag string, fn func(*http.Request, string) (string, bool)) extractor {
-	return extractor{tag: tag, extract: fn}
+	return extractor{tag: tag, extract: func(r *http.Request, name string) (any, bool) {
+		return fn(r, name)
+	}}
 }
 
 var defaultExtractors = []extractor{

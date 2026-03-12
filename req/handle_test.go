@@ -2,6 +2,7 @@ package req
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -374,6 +375,166 @@ func TestSignalGetQueryParam(t *testing.T) {
 	if got := w.Body.String(); got != "Alice" {
 		t.Fatalf("body = %q, want %q", got, "Alice")
 	}
+}
+
+// --- Table-driven decodeField tests across extraction mechanisms ---
+
+func TestDecodeFieldTypes(t *testing.T) {
+	type mechanism struct {
+		name string
+		tag  string
+		req  func(val string) *http.Request
+	}
+
+	mechanisms := []mechanism{
+		{
+			name: "query",
+			tag:  "query",
+			req: func(val string) *http.Request {
+				return httptest.NewRequest("GET", "/?key="+val, nil)
+			},
+		},
+		{
+			name: "cookie",
+			tag:  "cookie",
+			req: func(val string) *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.AddCookie(&http.Cookie{Name: "key", Value: val})
+				return r
+			},
+		},
+		{
+			name: "header",
+			tag:  "header",
+			req: func(val string) *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("key", val)
+				return r
+			},
+		},
+		{
+			name: "signal",
+			tag:  "signal",
+			req: func(val string) *http.Request {
+				// val is already the JSON-encoded value (e.g. "42", `"hello"`, "true")
+				body := `{"key":` + val + `}`
+				r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+				r.Header.Set("Content-Type", "application/json")
+				return r
+			},
+		},
+	}
+
+	// String
+	t.Run("string", func(t *testing.T) {
+		for _, m := range mechanisms {
+			t.Run(m.name, func(t *testing.T) {
+				handler := Handle(func(req *Req, in struct {
+					Key string `query:"key" cookie:"key" header:"key" signal:"key"`
+				}) error {
+					return req.Text(fmt.Sprint(in.Key))
+				})
+				var val string
+				if m.tag == "signal" {
+					val = `"hello"`
+				} else {
+					val = "hello"
+				}
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, m.req(val))
+				if w.Code != 200 {
+					t.Fatalf("status = %d, want 200", w.Code)
+				}
+				if got := w.Body.String(); got != "hello" {
+					t.Fatalf("got %q, want %q", got, "hello")
+				}
+			})
+		}
+	})
+
+	// Int
+	t.Run("int", func(t *testing.T) {
+		for _, m := range mechanisms {
+			t.Run(m.name, func(t *testing.T) {
+				handler := Handle(func(req *Req, in struct {
+					Key int `query:"key" cookie:"key" header:"key" signal:"key"`
+				}) error {
+					return req.Text(fmt.Sprint(in.Key))
+				})
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, m.req("42"))
+				if w.Code != 200 {
+					t.Fatalf("status = %d, want 200", w.Code)
+				}
+				if got := w.Body.String(); got != "42" {
+					t.Fatalf("got %q, want %q", got, "42")
+				}
+			})
+		}
+	})
+
+	// Float64
+	t.Run("float64", func(t *testing.T) {
+		for _, m := range mechanisms {
+			t.Run(m.name, func(t *testing.T) {
+				handler := Handle(func(req *Req, in struct {
+					Key float64 `query:"key" cookie:"key" header:"key" signal:"key"`
+				}) error {
+					return req.Text(fmt.Sprint(in.Key))
+				})
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, m.req("3.14"))
+				if w.Code != 200 {
+					t.Fatalf("status = %d, want 200", w.Code)
+				}
+				if got := w.Body.String(); got != "3.14" {
+					t.Fatalf("got %q, want %q", got, "3.14")
+				}
+			})
+		}
+	})
+
+	// Bool
+	t.Run("bool", func(t *testing.T) {
+		for _, m := range mechanisms {
+			t.Run(m.name, func(t *testing.T) {
+				handler := Handle(func(req *Req, in struct {
+					Key bool `query:"key" cookie:"key" header:"key" signal:"key"`
+				}) error {
+					return req.Text(fmt.Sprint(in.Key))
+				})
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, m.req("true"))
+				if w.Code != 200 {
+					t.Fatalf("status = %d, want 200", w.Code)
+				}
+				if got := w.Body.String(); got != "true" {
+					t.Fatalf("got %q, want %q", got, "true")
+				}
+			})
+		}
+	})
+
+	// Uint
+	t.Run("uint", func(t *testing.T) {
+		for _, m := range mechanisms {
+			t.Run(m.name, func(t *testing.T) {
+				handler := Handle(func(req *Req, in struct {
+					Key uint `query:"key" cookie:"key" header:"key" signal:"key"`
+				}) error {
+					return req.Text(fmt.Sprint(in.Key))
+				})
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, m.req("7"))
+				if w.Code != 200 {
+					t.Fatalf("status = %d, want 200", w.Code)
+				}
+				if got := w.Body.String(); got != "7" {
+					t.Fatalf("got %q, want %q", got, "7")
+				}
+			})
+		}
+	})
 }
 
 // --- Nested structs: decode recurses into struct-typed fields ---

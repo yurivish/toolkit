@@ -2,7 +2,6 @@ package req
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"reflect"
 
@@ -26,13 +25,10 @@ func withSignals(r *http.Request) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), signalsKey, signals))
 }
 
-func extractSignal(r *http.Request, name string) (string, bool) {
+func extractSignal(r *http.Request, name string) (any, bool) {
 	signals, _ := r.Context().Value(signalsKey).(map[string]any)
 	v, found := signals[name]
-	if !found {
-		return "", false
-	}
-	return fmt.Sprint(v), true
+	return v, found
 }
 
 // hasSignalTag reports whether t or any nested struct field has a "signal" tag.
