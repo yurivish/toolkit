@@ -50,4 +50,5 @@ var defaultExtractors = []extractor{
 	{"query", extractQuery},
 	{"cookie", extractCookie},
 	{"header", extractHeader},
+	{"signal", extractSignal},
 }

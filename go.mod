@@ -2,7 +2,7 @@ module github.com/yurivish/toolkit
 
 go 1.26
 
-require github.com/starfederation/datastar-go v1.0.3
+require github.com/starfederation/datastar-go v1.1.0
 
 require (
 	github.com/CAFxX/httpcompression v0.0.9 // indirect

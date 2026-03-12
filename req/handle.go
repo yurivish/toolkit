@@ -11,6 +11,7 @@ import (
 	"strings"
 )
 
+
 // --- Decoder ---
 
 // Decoder extracts struct fields from an HTTP request using struct tags.
@@ -337,7 +338,11 @@ func Handle[T any](fn func(*Req, T) error, opts ...handleOption) http.HandlerFun
 		extractors, validators = cfg.extractors, cfg.validators
 	}
 	decoder := Decoder{extractors: extractors}
+	needsSignals := hasSignalTag(reflect.TypeOf((*T)(nil)).Elem())
 	return func(w http.ResponseWriter, r *http.Request) {
+		if needsSignals {
+			r = withSignals(r)
+		}
 		var input T
 		fieldErrors, err := decoder.Decode(r, &input)
 		if err != nil {

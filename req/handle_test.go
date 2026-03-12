@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -329,6 +330,49 @@ func TestPointerFieldPresent(t *testing.T) {
 	}
 	if *got != "" {
 		t.Fatalf("Name = %q, want %q", *got, "")
+	}
+}
+
+// --- Signal extraction via DataStar ---
+
+func TestSignalPostJSON(t *testing.T) {
+	handler := Handle(func(req *Req, in struct {
+		Name string `signal:"name"`
+		Age  int    `signal:"age"`
+	}) error {
+		return req.Text(in.Name + ":" + strconv.Itoa(in.Age))
+	})
+
+	body := `{"name":"Alice","age":30}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(w, r)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if got := w.Body.String(); got != "Alice:30" {
+		t.Fatalf("body = %q, want %q", got, "Alice:30")
+	}
+}
+
+func TestSignalGetQueryParam(t *testing.T) {
+	handler := Handle(func(req *Req, in struct {
+		Name string `signal:"name"`
+	}) error {
+		return req.Text(in.Name)
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", `/?datastar=%7B%22name%22%3A%22Alice%22%7D`, nil)
+	handler.ServeHTTP(w, r)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if got := w.Body.String(); got != "Alice" {
+		t.Fatalf("body = %q, want %q", got, "Alice")
 	}
 }
 
